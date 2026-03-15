@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: config, error: configError } = await supabase
+    let { data: config, error: configError } = await supabase
       .from("app_config")
       .select("shopify_access_token, shopify_shop_domain")
       .eq("shop_domain", configShopDomain)
@@ -85,6 +85,23 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: configError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (!config) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("app_config")
+        .select("shopify_access_token, shopify_shop_domain")
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackError) {
+        return new Response(
+          JSON.stringify({ error: fallbackError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      config = fallback;
     }
 
     if (!config?.shopify_access_token) {

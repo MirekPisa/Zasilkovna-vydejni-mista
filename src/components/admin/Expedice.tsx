@@ -91,8 +91,23 @@ export function Expedice() {
     setCurrentOrder(orderName);
 
     try {
+      let resolvedShopDomain = shopDomain;
+      if (resolvedShopDomain === DEMO_SHOP) {
+        try {
+          const cfgRes = await fetch(`${functionsUrl}/manage-config?shop_domain=${encodeURIComponent(DEMO_SHOP)}`, {
+            headers: functionsHeaders,
+          });
+          const cfgJson = await cfgRes.json();
+          if (cfgJson.data?.shopify_shop_domain) {
+            resolvedShopDomain = cfgJson.data.shopify_shop_domain;
+            setShopDomain(resolvedShopDomain);
+          }
+        } catch {
+        }
+      }
+
       const ordersRes = await fetch(
-        `${functionsUrl}/shopify-orders?shop_domain=${encodeURIComponent(shopDomain)}`,
+        `${functionsUrl}/shopify-orders?shop_domain=${encodeURIComponent(resolvedShopDomain)}`,
         { headers: functionsHeaders }
       );
       const ordersJson = await ordersRes.json();
@@ -120,7 +135,7 @@ export function Expedice() {
         method: 'POST',
         headers: functionsHeaders,
         body: JSON.stringify({
-          shop_domain: shopDomain,
+          shop_domain: resolvedShopDomain,
           order_id: String(order.id),
           order_name: order.name,
           customer_name: order.customer_name ?? '',
