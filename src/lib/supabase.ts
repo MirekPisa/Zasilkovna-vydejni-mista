@@ -5,6 +5,12 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export const functionsUrl = `${supabaseUrl}/functions/v1`;
+export const functionsHeaders = {
+  Authorization: `Bearer ${supabaseAnonKey}`,
+  'Content-Type': 'application/json',
+};
+
 export type AppConfig = {
   id: string;
   shop_domain: string;

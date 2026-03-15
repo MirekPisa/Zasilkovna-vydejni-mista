@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { supabase } from '../../lib/supabase';
+import { functionsUrl, functionsHeaders } from '../../lib/supabase';
 
 const DEMO_SHOP = 'demo-shop.myshopify.com';
 
 export function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [isActive, setIsActive] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [configId, setConfigId] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -22,41 +22,47 @@ export function Settings() {
 
   async function loadConfig() {
     setLoading(true);
-    const { data } = await supabase
-      .from('app_config')
-      .select('*')
-      .eq('shop_domain', DEMO_SHOP)
-      .maybeSingle();
-
-    if (data) {
-      setApiKey(data.packeta_api_key);
-      setIsActive(data.is_active);
-      setConfigId(data.id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${functionsUrl}/manage-config?shop_domain=${encodeURIComponent(DEMO_SHOP)}`,
+        { headers: functionsHeaders }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Nepodařilo se načíst konfiguraci');
+      if (json.data) {
+        setApiKey(json.data.packeta_api_key ?? '');
+        setIsActive(json.data.is_active ?? true);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nepodařilo se načíst konfiguraci');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
-
-    if (configId) {
-      await supabase
-        .from('app_config')
-        .update({ packeta_api_key: apiKey, is_active: isActive })
-        .eq('id', configId);
-    } else {
-      const { data } = await supabase
-        .from('app_config')
-        .insert({ shop_domain: DEMO_SHOP, packeta_api_key: apiKey, is_active: isActive })
-        .select()
-        .single();
-      if (data) setConfigId(data.id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${functionsUrl}/manage-config?shop_domain=${encodeURIComponent(DEMO_SHOP)}`,
+        {
+          method: 'POST',
+          headers: functionsHeaders,
+          body: JSON.stringify({ packeta_api_key: apiKey, is_active: isActive }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Nepodařilo se uložit konfiguraci');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 4000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nepodařilo se uložit konfiguraci');
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
   }
 
   return (
@@ -74,6 +80,13 @@ export function Settings() {
           </div>
         </CardHeader>
         <CardBody className="space-y-5">
+          {error && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
           {loading ? (
             <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
           ) : (
@@ -114,7 +127,7 @@ export function Settings() {
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <Button onClick={handleSave} loading={saving} disabled={loading}>
+            <Button onClick={handleSave} loading={saving} disabled={loading || saving}>
               {saved ? (
                 <>
                   <CheckCircle className="w-4 h-4" />
@@ -128,7 +141,7 @@ export function Settings() {
               )}
             </Button>
             {saved && (
-              <span className="text-sm text-emerald-600 font-medium flex items-center gap-1.5">
+              <span className="text-sm text-emerald-600 font-medium flex items-center gap-1.5 animate-fade-in">
                 <CheckCircle className="w-4 h-4" />
                 Nastavení bylo úspěšně uloženo
               </span>

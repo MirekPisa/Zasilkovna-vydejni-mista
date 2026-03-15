@@ -3,60 +3,25 @@ import { Package, MapPin, Mail, RefreshCw, Inbox } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { supabase, type OrderPickup } from '../../lib/supabase';
+import { functionsUrl, functionsHeaders, type OrderPickup } from '../../lib/supabase';
 
 const DEMO_SHOP = 'demo-shop.myshopify.com';
-
-const DEMO_ORDERS: OrderPickup[] = [
-  {
-    id: '1',
-    shop_domain: DEMO_SHOP,
-    order_id: 'gid://shopify/Order/5001',
-    order_name: '#1001',
-    packeta_point_id: '10623',
-    packeta_point_name: 'Praha 1 - Náměstí Republiky',
-    packeta_point_address: 'Náměstí Republiky 1, 110 00 Praha 1',
-    customer_email: 'jan.novak@example.cz',
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: '2',
-    shop_domain: DEMO_SHOP,
-    order_id: 'gid://shopify/Order/5002',
-    order_name: '#1002',
-    packeta_point_id: '14455',
-    packeta_point_name: 'Brno - Tesco Futurum',
-    packeta_point_address: 'Heršpická 21, 639 00 Brno',
-    customer_email: 'marie.svobodova@example.cz',
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: '3',
-    shop_domain: DEMO_SHOP,
-    order_id: 'gid://shopify/Order/5003',
-    order_name: '#1003',
-    packeta_point_id: '22110',
-    packeta_point_name: 'Ostrava - Avion Shopping Park',
-    packeta_point_address: 'Rudná 3114/114, 700 30 Ostrava',
-    customer_email: 'petr.kral@example.cz',
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'právě teď';
   if (mins < 60) return `před ${mins} min`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `před ${hrs} hod`;
   const days = Math.floor(hrs / 24);
-  return `před ${days} dny`;
+  return `před ${days} ${days === 1 ? 'dnem' : days < 5 ? 'dny' : 'dny'}`;
 }
 
 export function OrdersList() {
   const [orders, setOrders] = useState<OrderPickup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [useDemoData, setUseDemoData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrders();
@@ -64,21 +29,20 @@ export function OrdersList() {
 
   async function loadOrders() {
     setLoading(true);
-    const { data } = await supabase
-      .from('order_pickups')
-      .select('*')
-      .eq('shop_domain', DEMO_SHOP)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (data && data.length > 0) {
-      setOrders(data);
-      setUseDemoData(false);
-    } else {
-      setOrders(DEMO_ORDERS);
-      setUseDemoData(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${functionsUrl}/save-point?shop_domain=${encodeURIComponent(DEMO_SHOP)}`,
+        { headers: functionsHeaders }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Nepodařilo se načíst objednávky');
+      setOrders(json.data ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nepodařilo se načíst objednávky');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -92,12 +56,12 @@ export function OrdersList() {
             <div>
               <h2 className="text-base font-semibold text-gray-900">Objednávky na Zásilkovnu</h2>
               <p className="text-sm text-gray-500">
-                {useDemoData ? 'Ukázková data — reálná data se zobrazí po integraci' : `${orders.length} objednávek celkem`}
+                {loading ? 'Načítám...' : error ? 'Chyba při načítání' : orders.length === 0 ? 'Žádné objednávky' : `${orders.length} ${orders.length === 1 ? 'objednávka' : orders.length < 5 ? 'objednávky' : 'objednávek'} celkem`}
               </p>
             </div>
           </div>
-          <Button variant="secondary" size="sm" onClick={loadOrders}>
-            <RefreshCw className="w-3.5 h-3.5" />
+          <Button variant="secondary" size="sm" onClick={loadOrders} disabled={loading}>
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Obnovit
           </Button>
         </div>
@@ -111,12 +75,25 @@ export function OrdersList() {
             ))}
           </div>
         </CardBody>
-      ) : orders.length === 0 ? (
+      ) : error ? (
         <CardBody>
           <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Package className="w-12 h-12 text-red-200 mb-3" />
+            <p className="text-gray-600 font-medium">Chyba při načítání objednávek</p>
+            <p className="text-sm text-gray-400 mt-1">{error}</p>
+            <Button variant="secondary" size="sm" onClick={loadOrders} className="mt-4">
+              Zkusit znovu
+            </Button>
+          </div>
+        </CardBody>
+      ) : orders.length === 0 ? (
+        <CardBody>
+          <div className="flex flex-col items-center justify-center py-14 text-center">
             <Inbox className="w-12 h-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">Zatím žádné objednávky</p>
-            <p className="text-sm text-gray-400 mt-1">Objednávky se zde zobrazí po výběru výdejního místa zákazníkem</p>
+            <p className="text-gray-600 font-medium">Zatím žádné objednávky s výdejním místem</p>
+            <p className="text-sm text-gray-400 mt-1 max-w-sm">
+              Jakmile zákazník vybere výdejní místo Zásilkovny v pokladně, objednávka se zde zobrazí.
+            </p>
           </div>
         </CardBody>
       ) : (
@@ -130,7 +107,7 @@ export function OrdersList() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-gray-900">{order.order_name}</span>
+                      <span className="font-semibold text-sm text-gray-900">{order.order_name || order.order_id}</span>
                       <Badge variant="success">Zásilkovna</Badge>
                       <span className="text-xs text-gray-400 font-mono">ID: {order.packeta_point_id}</span>
                     </div>
@@ -148,10 +125,7 @@ export function OrdersList() {
                   </div>
                 </div>
                 <div className="flex-shrink-0 text-right">
-                  <span className="text-xs text-gray-400">{timeAgo(order.created_at)}</span>
-                  {useDemoData && (
-                    <p className="text-xs text-amber-500 mt-1">Demo</p>
-                  )}
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{timeAgo(order.created_at)}</span>
                 </div>
               </div>
             </div>
