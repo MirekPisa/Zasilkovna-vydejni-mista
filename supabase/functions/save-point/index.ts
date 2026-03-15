@@ -10,8 +10,8 @@ const corsHeaders = {
 interface SavePointPayload {
   shop_domain: string;
   order_id: string;
-  order_name: string;
-  customer_email: string;
+  order_name?: string;
+  customer_email?: string;
   packeta_point_id: string;
   packeta_point_name: string;
   packeta_point_address: string;
@@ -30,7 +30,6 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === "POST") {
       const body: SavePointPayload = await req.json();
-
       const { shop_domain, order_id, order_name, customer_email, packeta_point_id, packeta_point_name, packeta_point_address } = body;
 
       if (!shop_domain || !order_id || !packeta_point_id) {
@@ -42,15 +41,18 @@ Deno.serve(async (req: Request) => {
 
       const { data, error } = await supabase
         .from("order_pickups")
-        .insert({
-          shop_domain,
-          order_id,
-          order_name: order_name ?? "",
-          customer_email: customer_email ?? "",
-          packeta_point_id,
-          packeta_point_name,
-          packeta_point_address,
-        })
+        .upsert(
+          {
+            shop_domain,
+            order_id,
+            order_name: order_name ?? "",
+            customer_email: customer_email ?? "",
+            packeta_point_id,
+            packeta_point_name,
+            packeta_point_address,
+          },
+          { onConflict: "shop_domain,order_id" }
+        )
         .select()
         .single();
 

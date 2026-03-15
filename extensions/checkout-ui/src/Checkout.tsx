@@ -10,8 +10,13 @@ import {
   useApplyMetafieldsChange,
   useMetafield,
   useSettings,
+  useShop,
+  useCartLines,
 } from '@shopify/ui-extensions-react/checkout';
 import { useEffect, useState, useCallback } from 'react';
+
+const SUPABASE_URL = 'https://ueeesorcaacmegwmvnnz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlZWVzb3JjYWFjbWVnd212bm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NTk1NTMsImV4cCI6MjA4OTEzNTU1M30.-rGO4rF7srpzMhLIQ1ln13QpTHsvQjWMgiWm9gkQ5OA';
 
 interface PacketaBranch {
   id: number;
@@ -20,8 +25,6 @@ interface PacketaBranch {
   street: string;
   zip: string;
   country: string;
-  url: string;
-  labelRouting: string;
 }
 
 export default reactExtension(
@@ -33,15 +36,17 @@ function PacketaPickupSelector() {
   const applyMetafieldsChange = useApplyMetafieldsChange();
   const { api_key } = useSettings<{ api_key: string }>();
   const savedPoint = useMetafield({ namespace: 'packeta', key: 'pickup_point' });
+  const shop = useShop();
+  const cartLines = useCartLines();
 
   const [selectedPoint, setSelectedPoint] = useState<PacketaBranch | null>(null);
   const [branches, setBranches] = useState<PacketaBranch[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSelector, setShowSelector] = useState(false);
 
-  // Load saved point from metafield
   useEffect(() => {
     if (savedPoint?.value) {
       try {
@@ -54,7 +59,7 @@ function PacketaPickupSelector() {
   const fetchBranches = useCallback(async (query: string) => {
     const effectiveApiKey = api_key || '';
     if (!effectiveApiKey) {
-      setError('Chybi API klic. Nastavte ho v nastaveni aplikace.');
+      setError('Chybí API klíč. Nastavte ho v nastavení aplikace.');
       return;
     }
 
@@ -66,34 +71,27 @@ function PacketaPickupSelector() {
         `https://widget.packeta.com/v6/api/pps/api/widget/v1/cz/branch.json?apiKey=${effectiveApiKey}`
       );
 
-      if (!response.ok) {
-        throw new Error('Chyba pri nacitani vydejnich mist.');
-      }
+      if (!response.ok) throw new Error('Chyba při načítání výdejních míst.');
 
       const data = await response.json();
       let filtered: PacketaBranch[] = [];
 
-      if (data && data.data) {
+      if (data?.data) {
+        const q = query.toLowerCase();
         filtered = data.data
-          .filter((b: PacketaBranch) => {
-            const q = query.toLowerCase();
-            return (
-              b.name?.toLowerCase().includes(q) ||
-              b.city?.toLowerCase().includes(q) ||
-              b.zip?.includes(q) ||
-              b.street?.toLowerCase().includes(q)
-            );
-          })
+          .filter((b: PacketaBranch) =>
+            b.name?.toLowerCase().includes(q) ||
+            b.city?.toLowerCase().includes(q) ||
+            b.zip?.includes(q) ||
+            b.street?.toLowerCase().includes(q)
+          )
           .slice(0, 30);
       }
 
       setBranches(filtered);
-
-      if (filtered.length === 0) {
-        setError('Zadna vydejni mista nenalezena. Zkuste jiny dotaz.');
-      }
-    } catch (e) {
-      setError('Nepodarilo se nacist vydejni mista. Zkuste to znovu.');
+      if (filtered.length === 0) setError('Žádná výdejní místa nenalezena. Zkuste jiný dotaz.');
+    } catch {
+      setError('Nepodařilo se načíst výdejní místa. Zkuste to znovu.');
     } finally {
       setLoading(false);
     }
@@ -106,11 +104,14 @@ function PacketaPickupSelector() {
     setSelectedPoint(branch);
     setShowSelector(false);
     setError(null);
+    setSaving(true);
+
+    const pointAddress = `${branch.street}, ${branch.city} ${branch.zip}`;
 
     const metafieldValue = JSON.stringify({
       packeta_point_id: String(branch.id),
       packeta_point_name: branch.name,
-      packeta_point_address: `${branch.street}, ${branch.city} ${branch.zip}`,
+      packeta_point_address: pointAddress,
     });
 
     await applyMetafieldsChange({
@@ -120,28 +121,52 @@ function PacketaPickupSelector() {
       valueType: 'string',
       value: metafieldValue,
     });
+
+    const cartToken = cartLines.length > 0 ? `cart-${cartLines[0].id}` : `cart-${Date.now()}`;
+
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/save-point`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          shop_domain: shop.myshopifyDomain,
+          order_id: cartToken,
+          order_name: '',
+          customer_email: '',
+          packeta_point_id: String(branch.id),
+          packeta_point_name: branch.name,
+          packeta_point_address: pointAddress,
+        }),
+      });
+    } catch {
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <BlockStack spacing="base">
-      {error && (
-        <Banner status="critical" title={error} />
-      )}
+      {error && <Banner status="critical" title={error} />}
 
       {selectedPoint ? (
         <BlockStack spacing="tight">
-          <Banner status="success" title="Vydejni misto vybrano">
+          <Banner status="success" title={saving ? 'Ukládám...' : 'Výdejní místo vybráno'}>
             <Text>
-              {selectedPoint.name} — {selectedPoint.street}, {selectedPoint.city} {selectedPoint.zip}
+              {(selectedPoint as unknown as { packeta_point_name?: string }).packeta_point_name ?? selectedPoint.name}
+              {' — '}
+              {(selectedPoint as unknown as { packeta_point_address?: string }).packeta_point_address ?? `${selectedPoint.street}, ${selectedPoint.city} ${selectedPoint.zip}`}
             </Text>
           </Banner>
           <Button kind="secondary" onPress={() => setShowSelector(true)}>
-            Zmenit vydejni misto
+            Změnit výdejní místo
           </Button>
         </BlockStack>
       ) : (
         <Button kind="primary" onPress={() => setShowSelector(true)}>
-          Vybrat vydejni misto Zasilkovny
+          Vybrat výdejní místo Zásilkovny
         </Button>
       )}
 
@@ -149,7 +174,7 @@ function PacketaPickupSelector() {
         <BlockStack spacing="base">
           <InlineStack spacing="base">
             <TextField
-              label="Hledat mesto, PSC nebo nazev"
+              label="Hledat město, PSČ nebo název"
               value={searchQuery}
               onChange={(val) => setSearchQuery(val)}
             />
@@ -164,7 +189,7 @@ function PacketaPickupSelector() {
 
           {branches.length > 0 && (
             <Select
-              label="Vyberte vydejni misto"
+              label="Vyberte výdejní místo"
               options={branches.map(b => ({
                 value: String(b.id),
                 label: `${b.name} - ${b.street}, ${b.city} ${b.zip}`,

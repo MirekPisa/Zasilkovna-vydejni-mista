@@ -4,6 +4,7 @@ api_version = "2025-04"
 type = "ui_extension"
 name = "Zásilkovna – Výběr výdejního místa"
 handle = "zasilkovna-checkout-ui"
+network_access = true
 
 [[extensions.targeting]]
 module = "./src/Checkout.tsx"
