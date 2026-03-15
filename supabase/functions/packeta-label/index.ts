@@ -105,14 +105,14 @@ Deno.serve(async (req: Request) => {
 
     let { data: config } = await supabase
       .from("app_config")
-      .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi")
+      .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi, hd_address_id")
       .eq("shop_domain", shop_domain)
       .maybeSingle();
 
     if (!config) {
       const { data: fallback } = await supabase
         .from("app_config")
-        .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi")
+        .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi, hd_address_id")
         .limit(1)
         .maybeSingle();
       config = fallback;
@@ -130,6 +130,7 @@ Deno.serve(async (req: Request) => {
     const labelOffset: number = config.label_offset ?? 0;
     const labelType: string = config.label_type ?? 'pdf';
     const zplDpi: number = config.zpl_dpi ?? 203;
+    const hdAddressId: number = config.hd_address_id ?? 106;
 
     const nameParts = (customer_name ?? '').trim().split(/\s+/);
     const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0] || 'Zákazník';
@@ -168,11 +169,10 @@ Deno.serve(async (req: Request) => {
     <name>${escapeXml(addrFirstName)}</name>
     <surname>${escapeXml(addrLastName)}</surname>
     <email>${escapeXml(customer_email ?? '')}</email>
+    <addressId>${hdAddressId}</addressId>
     <street>${escapeXml(addr.address1)}</street>
-    <houseNumber></houseNumber>
     <city>${escapeXml(addr.city)}</city>
     <zip>${escapeXml(addr.zip)}</zip>
-    <countryCode>${escapeXml(addr.country_code)}</countryCode>
     <value>${value.toFixed(2)}</value>
     <weight>1</weight>
     <eshop>printybob.cz</eshop>

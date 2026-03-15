@@ -35,6 +35,7 @@ export function Settings() {
   const [labelOffset, setLabelOffset] = useState(0);
   const [labelType, setLabelType] = useState<'pdf' | 'zpl'>('pdf');
   const [zplDpi, setZplDpi] = useState(203);
+  const [hdAddressId, setHdAddressId] = useState(106);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -75,6 +76,7 @@ export function Settings() {
         setLabelOffset(json.data.label_offset ?? 0);
         setLabelType(json.data.label_type ?? 'pdf');
         setZplDpi(json.data.zpl_dpi ?? 203);
+        setHdAddressId(json.data.hd_address_id ?? 106);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Nepodařilo se načíst konfiguraci');
@@ -104,6 +106,7 @@ export function Settings() {
             label_offset: labelOffset,
             label_type: labelType,
             zpl_dpi: zplDpi,
+            hd_address_id: hdAddressId,
           }),
         }
       );
@@ -469,6 +472,20 @@ export function Settings() {
                   <p className="text-xs text-gray-400 mt-1.5">Rozlišení termotiskárny — zkontrolujte v manuálu tiskárny</p>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  HD Address ID <span className="text-gray-400 font-normal">(doručení na adresu)</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={hdAddressId}
+                  onChange={e => setHdAddressId(parseInt(e.target.value) || 106)}
+                  className="w-32 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#008060] focus:border-transparent transition-all"
+                />
+                <p className="text-xs text-gray-400 mt-1.5">ID přepravce Zásilkovny pro doručení na adresu. Výchozí: <strong>106</strong> (Zásilkovna Home Delivery CZ). Najdete ho v Packeta klientské zóně → Přepravci.</p>
+              </div>
             </>
           )}
         </CardBody>
