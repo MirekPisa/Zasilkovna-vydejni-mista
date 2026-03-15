@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const pdfBase64 = parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
+    const pdfBase64 = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
     if (!pdfBase64) {
       return new Response(
         JSON.stringify({ error: "NO_PDF", message: "Packeta nevrátila PDF data.", barcode }),
