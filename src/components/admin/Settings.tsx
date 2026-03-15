@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X, Printer } from 'lucide-react';
+import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X, Printer, MapPin } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -28,6 +28,7 @@ export function Settings() {
   const [isActive, setIsActive] = useState(true);
   const [shopifyToken, setShopifyToken] = useState('');
   const [shopifyShopDomain, setShopifyShopDomain] = useState('printybob.myshopify.com');
+  const [overwriteShippingAddress, setOverwriteShippingAddress] = useState(true);
   const [labelFormat, setLabelFormat] = useState('A6 on A6');
   const [labelOffset, setLabelOffset] = useState(0);
   const [labelType, setLabelType] = useState<'pdf' | 'zpl'>('pdf');
@@ -67,6 +68,7 @@ export function Settings() {
         setIsActive(json.data.is_active ?? true);
         setShopifyToken(json.data.shopify_access_token ?? '');
         setShopifyShopDomain(json.data.shopify_shop_domain || 'printybob.myshopify.com');
+        setOverwriteShippingAddress(json.data.overwrite_shipping_address ?? true);
         setLabelFormat(json.data.label_format ?? 'A6 on A6');
         setLabelOffset(json.data.label_offset ?? 0);
         setLabelType(json.data.label_type ?? 'pdf');
@@ -95,6 +97,7 @@ export function Settings() {
             is_active: isActive,
             shopify_access_token: shopifyToken,
             shopify_shop_domain: shopifyShopDomain,
+            overwrite_shipping_address: overwriteShippingAddress,
             label_format: labelFormat,
             label_offset: labelOffset,
             label_type: labelType,
@@ -264,6 +267,50 @@ export function Settings() {
                 >
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-teal-50">
+              <MapPin className="w-5 h-5 text-teal-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Webhook objednávek</h2>
+              <p className="text-sm text-gray-500">Automatické přepsání dodací adresy na výdejní místo Zásilkovny</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardBody className="space-y-5">
+          {loading ? (
+            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+          ) : (
+            <>
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={overwriteShippingAddress}
+                  onClick={() => setOverwriteShippingAddress(v => !v)}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#008060] focus:ring-offset-2 ${overwriteShippingAddress ? 'bg-[#008060]' : 'bg-gray-300'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${overwriteShippingAddress ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Přepisovat dodací adresu na výdejní místo</p>
+                  <p className="text-xs text-gray-500">Po přijetí objednávky webhook přepíše shipping_address na adresu vybraného výdejního místa</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200">
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  <strong>Nastavení webhookU v Shopify:</strong> Admin → Nastavení → Oznámení → Webhooky → Přidat webhook<br />
+                  Událost: <strong>Vytvoření objednávky</strong>, URL: <code className="bg-blue-100 px-1 rounded text-blue-800">/functions/v1/order-webhook</code>, Formát: JSON
+                </p>
               </div>
             </>
           )}

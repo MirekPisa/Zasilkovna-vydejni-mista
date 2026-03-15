@@ -31,7 +31,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("app_config")
-        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, updated_at")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, overwrite_shipping_address, updated_at")
         .eq("shop_domain", shopDomain)
         .maybeSingle();
 
@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: fallback, error: fallbackError } = await supabase
         .from("app_config")
-        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, updated_at")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, overwrite_shipping_address, updated_at")
         .limit(1)
         .maybeSingle();
 
@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
         .eq("shop_domain", shopDomain)
         .maybeSingle();
 
-      const { label_format, label_offset, label_type, zpl_dpi } = body;
+      const { label_format, label_offset, label_type, zpl_dpi, overwrite_shipping_address } = body;
       const payload: Record<string, unknown> = {};
       if (packeta_api_key !== undefined) payload.packeta_api_key = packeta_api_key;
       if (packeta_api_password !== undefined) payload.packeta_api_password = packeta_api_password;
@@ -89,6 +89,7 @@ Deno.serve(async (req: Request) => {
       if (label_offset !== undefined) payload.label_offset = label_offset;
       if (label_type !== undefined) payload.label_type = label_type;
       if (zpl_dpi !== undefined) payload.zpl_dpi = zpl_dpi;
+      if (overwrite_shipping_address !== undefined) payload.overwrite_shipping_address = overwrite_shipping_address;
 
       let result;
       if (existing) {
