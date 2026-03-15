@@ -17,6 +17,17 @@ interface ScanRecord {
 }
 
 type ProcessState = 'idle' | 'processing';
+type ProcessStep = 'order' | 'label';
+
+interface ShopifyOrder {
+  id: number;
+  name: string;
+  total_price: string;
+  currency: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  packeta_point_id: string;
+}
 
 function downloadPdf(base64: string, filename: string) {
   const link = document.createElement('a');
@@ -28,10 +39,12 @@ function downloadPdf(base64: string, filename: string) {
 export function Expedice() {
   const [input, setInput] = useState('');
   const [processState, setProcessState] = useState<ProcessState>('idle');
+  const [processStep, setProcessStep] = useState<ProcessStep>('order');
   const [currentOrder, setCurrentOrder] = useState('');
   const [history, setHistory] = useState<ScanRecord[]>([]);
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [dirHandleLost, setDirHandleLost] = useState(false);
+  const [shopDomain, setShopDomain] = useState(DEMO_SHOP);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -41,6 +54,15 @@ export function Expedice() {
         setDirHandleLost(true);
       }
     }).catch(() => {});
+
+    fetch(`${functionsUrl}/manage-config?shop_domain=${encodeURIComponent(DEMO_SHOP)}`, {
+      headers: functionsHeaders,
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (json.data?.shopify_shop_domain) setShopDomain(json.data.shopify_shop_domain);
+      })
+      .catch(() => {});
   }, []);
 
   const focusInput = useCallback(() => {
@@ -65,27 +87,53 @@ export function Expedice() {
 
     setInput('');
     setProcessState('processing');
+    setProcessStep('order');
     setCurrentOrder(orderName);
 
     try {
-      const res = await fetch(`${functionsUrl}/packeta-label`, {
+      const ordersRes = await fetch(
+        `${functionsUrl}/shopify-orders?shop_domain=${encodeURIComponent(shopDomain)}`,
+        { headers: functionsHeaders }
+      );
+      const ordersJson = await ordersRes.json();
+
+      if (!ordersRes.ok) {
+        throw new Error(ordersJson.message ?? ordersJson.error ?? 'Nepodařilo se načíst objednávky ze Shopify');
+      }
+
+      const orders: ShopifyOrder[] = ordersJson.data ?? [];
+      const order = orders.find(o =>
+        o.name === `#${orderName}` || o.name === orderName || String(o.id) === orderName
+      );
+
+      if (!order) {
+        throw new Error(`Objednávka #${orderName} nebyla nalezena v Shopify`);
+      }
+
+      if (!order.packeta_point_id) {
+        throw new Error(`Objednávka #${orderName} nemá nastavené výdejní místo Zásilkovny`);
+      }
+
+      setProcessStep('label');
+
+      const labelRes = await fetch(`${functionsUrl}/packeta-label`, {
         method: 'POST',
         headers: functionsHeaders,
         body: JSON.stringify({
-          shop_domain: DEMO_SHOP,
-          order_id: orderName,
-          order_name: `#${orderName}`,
-          customer_name: 'Zákazník',
-          customer_email: '',
-          packeta_point_id: '',
-          order_value: '0',
-          currency: 'CZK',
+          shop_domain: shopDomain,
+          order_id: String(order.id),
+          order_name: order.name,
+          customer_name: order.customer_name ?? '',
+          customer_email: order.customer_email ?? '',
+          packeta_point_id: order.packeta_point_id,
+          order_value: order.total_price,
+          currency: order.currency,
         }),
       });
 
-      const json = await res.json();
+      const json = await labelRes.json();
 
-      if (!res.ok || !json.success) {
+      if (!labelRes.ok || !json.success) {
         throw new Error(json.message ?? json.error ?? 'Generování štítku selhalo');
       }
 
@@ -199,8 +247,14 @@ export function Expedice() {
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <Loader2 className="w-10 h-10 text-[#008060] animate-spin" />
               <div className="text-center">
-                <p className="text-base font-semibold text-gray-900">Generuji štítek pro objednávku #{currentOrder}</p>
-                <p className="text-sm text-gray-500 mt-1">Komunikuji s Packeta API...</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {processStep === 'order'
+                    ? `Načítám objednávku #${currentOrder}...`
+                    : `Generuji štítek pro objednávku #${currentOrder}...`}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {processStep === 'order' ? 'Ověřuji objednávku v Shopify...' : 'Komunikuji s Packeta API...'}
+                </p>
               </div>
             </div>
           )}
