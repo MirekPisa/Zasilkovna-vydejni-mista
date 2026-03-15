@@ -31,9 +31,13 @@ interface ShopifyOrder {
   packeta_point_id: string;
 }
 
+function cleanBase64(s: string): string {
+  return s.replace(/\s/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
+}
+
 function downloadPdf(base64: string, filename: string) {
   const link = document.createElement('a');
-  link.href = `data:application/pdf;base64,${base64}`;
+  link.href = `data:application/pdf;base64,${cleanBase64(base64)}`;
   link.download = filename;
   link.click();
 }
@@ -170,7 +174,7 @@ export function Expedice() {
             .then(fh => fh.createWritable())
             .then(w => w.close())
             .catch(() => {});
-          await savePdfToFolder(dirHandle, filename, labelJson.pdf_base64);
+          await savePdfToFolder(dirHandle, filename, cleanBase64(labelJson.pdf_base64));
           savedToFolder = true;
         } catch {
           setDirHandleLost(true);

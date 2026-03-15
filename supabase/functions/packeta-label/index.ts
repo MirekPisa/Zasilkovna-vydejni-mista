@@ -177,13 +177,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const fileData = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
-    if (!fileData) {
+    const rawFileData = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
+    if (!rawFileData) {
       return new Response(
-        JSON.stringify({ error: "NO_LABEL_DATA", message: "Packeta nevrátila data štítku.", barcode }),
+        JSON.stringify({ error: "NO_LABEL_DATA", message: "Packeta nevrátila data štítku.", barcode, raw: labelResponse.substring(0, 500) }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const fileData = rawFileData.replace(/\s/g, '');
 
     await supabase.from("packeta_labels").insert({
       shop_domain,

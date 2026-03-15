@@ -48,7 +48,8 @@ export async function savePdfToFolder(
   filename: string,
   base64Data: string
 ): Promise<void> {
-  const binary = atob(base64Data);
+  const clean = base64Data.replace(/\s/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
+  const binary = atob(clean);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
