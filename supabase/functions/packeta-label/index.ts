@@ -76,11 +76,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: config } = await supabase
+    let { data: config } = await supabase
       .from("app_config")
       .select("packeta_api_password")
       .eq("shop_domain", shop_domain)
       .maybeSingle();
+
+    if (!config) {
+      const { data: fallback } = await supabase
+        .from("app_config")
+        .select("packeta_api_password")
+        .limit(1)
+        .maybeSingle();
+      config = fallback;
+    }
 
     if (!config?.packeta_api_password) {
       return new Response(
