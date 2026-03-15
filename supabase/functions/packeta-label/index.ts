@@ -26,6 +26,7 @@ interface CreateLabelRequest {
   order_name: string;
   customer_name: string;
   customer_email: string;
+  customer_phone: string | null;
   packeta_point_id: string | null;
   shipping_address: ShippingAddress | null;
   order_value: string;
@@ -87,7 +88,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const payload: CreateLabelRequest = await req.json();
-    const { shop_domain, order_id, order_name, customer_name, customer_email, packeta_point_id, shipping_address, order_value, currency } = payload;
+    const { shop_domain, order_id, order_name, customer_name, customer_email, customer_phone, packeta_point_id, shipping_address, order_value, currency } = payload;
 
     if (!shop_domain || !order_id) {
       return new Response(
@@ -161,6 +162,7 @@ Deno.serve(async (req: Request) => {
       const addr = shipping_address!;
       const addrFirstName = addr.first_name || firstName;
       const addrLastName = addr.last_name || lastName;
+      const phone = addr.phone || customer_phone || '+420000000000';
       createPacketXml = `<?xml version="1.0" encoding="utf-8"?>
 <createPacket>
   <apiPassword>${apiPassword}</apiPassword>
@@ -173,11 +175,11 @@ Deno.serve(async (req: Request) => {
     <street>${escapeXml(addr.address1)}</street>
     <city>${escapeXml(addr.city)}</city>
     <zip>${escapeXml(addr.zip)}</zip>
+    <phone>${escapeXml(phone)}</phone>
     <value>${value.toFixed(2)}</value>
     <weight>1</weight>
     <eshop>printybob.cz</eshop>
     <currency>${currency || 'CZK'}</currency>
-    ${addr.phone ? `<phone>${escapeXml(addr.phone)}</phone>` : ''}
   </packetAttributes>
 </createPacket>`;
     }

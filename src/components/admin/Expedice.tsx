@@ -28,7 +28,9 @@ interface ShopifyOrder {
   currency: string;
   customer_name: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
   packeta_point_id: string;
+  shipping_address: { address1: string; city: string; zip: string; phone: string | null; first_name: string; last_name: string; country_code: string; address2: string | null } | null;
 }
 
 function cleanBase64(s: string): string {
@@ -181,7 +183,9 @@ export function Expedice({ externalScan, onExternalScanHandled }: ExpediceProps)
           order_name: order.name,
           customer_name: order.customer_name ?? '',
           customer_email: order.customer_email ?? '',
+          customer_phone: order.customer_phone ?? null,
           packeta_point_id: order.packeta_point_id,
+          shipping_address: order.shipping_address ?? null,
           order_value: order.total_price,
           currency: order.currency,
         }),

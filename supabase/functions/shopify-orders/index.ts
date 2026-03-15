@@ -21,6 +21,7 @@ interface ShopifyCustomer {
   first_name: string;
   last_name: string;
   email: string;
+  phone: string | null;
 }
 
 interface ShopifyAddress {
@@ -42,6 +43,7 @@ interface ShopifyOrder {
   fulfillment_status: string | null;
   total_price: string;
   currency: string;
+  phone: string | null;
   note_attributes: ShopifyNoteAttribute[];
   shipping_lines: ShopifyShippingLine[];
   customer: ShopifyCustomer | null;
@@ -126,7 +128,7 @@ Deno.serve(async (req: Request) => {
     const shopDomain = config.shopify_shop_domain || configShopDomain;
     const token = config.shopify_access_token;
 
-    const shopifyUrl = `https://${shopDomain}/admin/api/2025-01/orders.json?status=any&limit=100&fields=id,name,created_at,financial_status,fulfillment_status,total_price,currency,note_attributes,shipping_lines,customer,shipping_address`;
+    const shopifyUrl = `https://${shopDomain}/admin/api/2025-01/orders.json?status=any&limit=100&fields=id,name,created_at,financial_status,fulfillment_status,total_price,currency,phone,note_attributes,shipping_lines,customer,shipping_address`;
 
     const shopifyRes = await fetch(shopifyUrl, {
       headers: {
@@ -166,6 +168,7 @@ Deno.serve(async (req: Request) => {
           ? `${order.customer.first_name} ${order.customer.last_name}`.trim()
           : null,
         customer_email: order.customer?.email ?? null,
+        customer_phone: order.shipping_address?.phone || order.phone || order.customer?.phone || null,
         shipping_title: order.shipping_lines?.[0]?.title ?? null,
         packeta_point_id: getAttr(order.note_attributes, 'packeta_point_id'),
         packeta_point_name: getAttr(order.note_attributes, 'packeta_point_name'),
