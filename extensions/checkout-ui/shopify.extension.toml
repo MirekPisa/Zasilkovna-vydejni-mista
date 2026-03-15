@@ -1,0 +1,17 @@
+api_version = "2025-01"
+
+[[extensions]]
+type = "ui_extension"
+name = "Zásilkovna – Výběr výdejního místa"
+handle = "zasilkovna-checkout-ui"
+
+[[extensions.targeting]]
+module = "./src/Checkout.tsx"
+target = "purchase.checkout.shipping-option-list.render-after"
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "api_key"
+  type = "single_line_text_field"
+  name = "Packeta API klíč"
+  description = "Váš API klíč z Packeta klientské zóny (použit pro widget v6)"
