@@ -55,7 +55,8 @@ function formatPrice(price: string, currency: string): string {
 }
 
 function downloadPdf(base64: string, filename: string) {
-  const byteCharacters = atob(base64);
+  const cleanedBase64 = base64.replace(/\s/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
+  const byteCharacters = atob(cleanedBase64);
   const byteNumbers = new Array(byteCharacters.length);
   for (let i = 0; i < byteCharacters.length; i++) {
     byteNumbers[i] = byteCharacters.charCodeAt(i);
