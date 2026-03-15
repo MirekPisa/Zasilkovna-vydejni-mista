@@ -9,13 +9,25 @@ const corsHeaders = {
 
 const PACKETA_API_URL = "https://www.zasilkovna.cz/api/rest";
 
+interface ShippingAddress {
+  first_name: string;
+  last_name: string;
+  address1: string;
+  address2: string | null;
+  city: string;
+  zip: string;
+  country_code: string;
+  phone: string | null;
+}
+
 interface CreateLabelRequest {
   shop_domain: string;
   order_id: string;
   order_name: string;
   customer_name: string;
   customer_email: string;
-  packeta_point_id: string;
+  packeta_point_id: string | null;
+  shipping_address: ShippingAddress | null;
   order_value: string;
   currency: string;
 }
@@ -75,11 +87,18 @@ Deno.serve(async (req: Request) => {
     );
 
     const payload: CreateLabelRequest = await req.json();
-    const { shop_domain, order_id, order_name, customer_name, customer_email, packeta_point_id, order_value, currency } = payload;
+    const { shop_domain, order_id, order_name, customer_name, customer_email, packeta_point_id, shipping_address, order_value, currency } = payload;
 
-    if (!shop_domain || !order_id || !packeta_point_id) {
+    if (!shop_domain || !order_id) {
       return new Response(
-        JSON.stringify({ error: "Chybí povinné parametry: shop_domain, order_id, packeta_point_id" }),
+        JSON.stringify({ error: "Chybí povinné parametry: shop_domain, order_id" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!packeta_point_id && !shipping_address) {
+      return new Response(
+        JSON.stringify({ error: "Chybí adresa doručení: zadejte packeta_point_id nebo shipping_address" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -119,7 +138,10 @@ Deno.serve(async (req: Request) => {
     const orderNum = order_name.replace(/^#/, '');
     const value = parseFloat(order_value) || 0;
 
-    const createPacketXml = `<?xml version="1.0" encoding="utf-8"?>
+    let createPacketXml: string;
+
+    if (packeta_point_id) {
+      createPacketXml = `<?xml version="1.0" encoding="utf-8"?>
 <createPacket>
   <apiPassword>${apiPassword}</apiPassword>
   <packetAttributes>
@@ -134,6 +156,31 @@ Deno.serve(async (req: Request) => {
     <currency>${currency || 'CZK'}</currency>
   </packetAttributes>
 </createPacket>`;
+    } else {
+      const addr = shipping_address!;
+      const addrFirstName = addr.first_name || firstName;
+      const addrLastName = addr.last_name || lastName;
+      createPacketXml = `<?xml version="1.0" encoding="utf-8"?>
+<createPacket>
+  <apiPassword>${apiPassword}</apiPassword>
+  <packetAttributes>
+    <number>${orderNum}</number>
+    <name>${escapeXml(addrFirstName)}</name>
+    <surname>${escapeXml(addrLastName)}</surname>
+    <email>${escapeXml(customer_email ?? '')}</email>
+    <street>${escapeXml(addr.address1)}</street>
+    <houseNumber></houseNumber>
+    <city>${escapeXml(addr.city)}</city>
+    <zip>${escapeXml(addr.zip)}</zip>
+    <countryCode>${escapeXml(addr.country_code)}</countryCode>
+    <value>${value.toFixed(2)}</value>
+    <weight>1</weight>
+    <eshop>printybob.cz</eshop>
+    <currency>${currency || 'CZK'}</currency>
+    ${addr.phone ? `<phone>${escapeXml(addr.phone)}</phone>` : ''}
+  </packetAttributes>
+</createPacket>`;
+    }
 
     const createResponse = await callPacketaApi(createPacketXml);
 

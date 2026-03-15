@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Package, MapPin, Mail, RefreshCw, Inbox, User, CreditCard, AlertCircle, Settings, Printer, CheckCircle, Tag } from 'lucide-react';
+import { Package, MapPin, Mail, RefreshCw, Inbox, User, CreditCard, AlertCircle, Settings, Printer, CheckCircle, Tag, Truck } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { functionsUrl, functionsHeaders } from '../../lib/supabase';
 
 const DEMO_SHOP = 'demo-shop.myshopify.com';
+
+interface ShippingAddress {
+  first_name: string;
+  last_name: string;
+  address1: string;
+  address2: string | null;
+  city: string;
+  zip: string;
+  country_code: string;
+  phone: string | null;
+}
 
 interface ShopifyOrder {
   id: number;
@@ -21,6 +32,7 @@ interface ShopifyOrder {
   packeta_point_id: string;
   packeta_point_name: string;
   packeta_point_address: string;
+  shipping_address: ShippingAddress | null;
 }
 
 type LabelState =
@@ -120,7 +132,8 @@ export function OrdersList() {
           order_name: order.name,
           customer_name: order.customer_name ?? '',
           customer_email: order.customer_email ?? '',
-          packeta_point_id: order.packeta_point_id,
+          packeta_point_id: order.packeta_point_id || null,
+          shipping_address: order.shipping_address ?? null,
           order_value: order.total_price,
           currency: order.currency,
         }),
@@ -238,8 +251,8 @@ export function OrdersList() {
             const fin = financialInfo(order.financial_status);
             const ful = fulfillmentInfo(order.fulfillment_status);
             const hasPacketaData = !!(order.packeta_point_id || order.packeta_point_name);
+            const isAddressDelivery = !order.packeta_point_id;
             const labelState = labelStates[order.id] ?? { status: 'idle' };
-            const canCreateLabel = hasPacketaData && order.packeta_point_id;
 
             return (
               <div key={order.id} className="px-6 py-4 hover:bg-gray-50/50 transition-colors">
@@ -280,6 +293,25 @@ export function OrdersList() {
                             <p className="text-xs text-emerald-600 font-mono">ID: {order.packeta_point_id}</p>
                           )}
                         </div>
+                      )}
+
+                      {isAddressDelivery && order.shipping_address && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 mb-1.5 space-y-0.5">
+                          <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                            <Truck className="w-3 h-3 flex-shrink-0" />
+                            Doručení na adresu
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {[order.shipping_address.address1, order.shipping_address.city, order.shipping_address.zip].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                      )}
+
+                      {isAddressDelivery && !order.shipping_address && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1 mb-1.5">
+                          <Truck className="w-3 h-3 flex-shrink-0" />
+                          Doručení na adresu
+                        </p>
                       )}
 
                       {labelState.status === 'done' && (
@@ -326,24 +358,16 @@ export function OrdersList() {
                         Štítek vytvořen
                       </span>
                     ) : (
-                      <div className="relative group">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={!canCreateLabel || labelState.status === 'loading'}
-                          loading={labelState.status === 'loading'}
-                          onClick={() => handleCreateLabel(order)}
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          Vytvořit štítek
-                        </Button>
-                        {!canCreateLabel && (
-                          <div className="absolute bottom-full right-0 mb-1.5 w-44 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-normal text-center leading-snug z-10">
-                            Chybí výdejní místo — zákazník nevybral pobočku Zásilkovny
-                            <span className="absolute top-full right-3 border-4 border-transparent border-t-gray-900" />
-                          </div>
-                        )}
-                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={labelState.status === 'loading'}
+                        loading={labelState.status === 'loading'}
+                        onClick={() => handleCreateLabel(order)}
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Vytvořit štítek
+                      </Button>
                     )}
                   </div>
                 </div>
