@@ -1,11 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Settings2, Package, BookOpen, LayoutDashboard, MapPin, TrendingUp, ShoppingBag, Scan, RefreshCw, AlertCircle, CheckCircle, ArrowRight, Smartphone, ShoppingCart, Tag, Truck, BarChart3, Clock, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Settings2, Package, BookOpen, LayoutDashboard, MapPin, TrendingUp, ShoppingBag, Scan, RefreshCw, AlertCircle, CheckCircle, ArrowRight, Smartphone, ShoppingCart, Tag, Truck, BarChart3, Clock, Zap, X } from 'lucide-react';
 import { Settings } from './components/admin/Settings';
 import { OrdersList } from './components/admin/OrdersList';
 import { SetupGuide } from './components/admin/SetupGuide';
 import { WidgetPreview } from './components/admin/WidgetPreview';
 import { Expedice } from './components/admin/Expedice';
 import { functionsUrl, functionsHeaders } from './lib/supabase';
+import { useBarcodeScanner } from './lib/barcodeScanner';
+
+interface ScanToast {
+  id: string;
+  code: string;
+}
 
 type Tab = 'dashboard' | 'settings' | 'orders' | 'expedice' | 'setup';
 
@@ -61,10 +67,26 @@ export default function App() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [pendingScan, setPendingScan] = useState<string | null>(null);
+  const [scanToasts, setScanToasts] = useState<ScanToast[]>([]);
+  const scannerActive = useRef(true);
 
   useEffect(() => {
     if (activeTab === 'dashboard') loadStats();
   }, [activeTab]);
+
+  const handleGlobalScan = useCallback((code: string) => {
+    const toastId = crypto.randomUUID();
+    setScanToasts(prev => [...prev, { id: toastId, code }]);
+    setTimeout(() => {
+      setScanToasts(prev => prev.filter(t => t.id !== toastId));
+    }, 3500);
+
+    setPendingScan(code);
+    setActiveTab('expedice');
+  }, []);
+
+  useBarcodeScanner(handleGlobalScan);
 
   async function loadStats() {
     setStatsLoading(true);
@@ -99,6 +121,29 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F6F6F7]">
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+        {scanToasts.map(toast => (
+          <div
+            key={toast.id}
+            className="flex items-center gap-3 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl text-sm font-medium animate-in slide-in-from-right-4 duration-300 pointer-events-auto"
+          >
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-[#008060] flex-shrink-0">
+              <Scan className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 leading-none mb-0.5">Scan detekován</p>
+              <p className="font-mono text-white leading-none">{toast.code}</p>
+            </div>
+            <button
+              onClick={() => setScanToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="ml-2 text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-6">
           <div className="flex items-center gap-4 h-14">
@@ -112,7 +157,7 @@ export default function App() {
               </div>
             </div>
             <div className="w-px h-6 bg-gray-200" />
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-1 flex-1">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
@@ -128,6 +173,15 @@ export default function App() {
                 </button>
               ))}
             </nav>
+            <div
+              title="Globální scanner aktivní — skenujte kdekoliv v aplikaci"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 cursor-default select-none"
+              ref={scannerActive as React.RefObject<HTMLDivElement>}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <Scan className="w-3 h-3 text-emerald-600" />
+              <span className="text-xs font-medium text-emerald-700 hidden sm:block">Scanner</span>
+            </div>
           </div>
         </div>
       </header>
@@ -360,7 +414,10 @@ export default function App() {
               <h2 className="text-xl font-bold text-gray-900">Expedice</h2>
               <p className="text-sm text-gray-500 mt-0.5">Automatické generování štítků pomocí čtečky čárových kódů</p>
             </div>
-            <Expedice />
+            <Expedice
+              externalScan={pendingScan}
+              onExternalScanHandled={() => setPendingScan(null)}
+            />
           </div>
         )}
 

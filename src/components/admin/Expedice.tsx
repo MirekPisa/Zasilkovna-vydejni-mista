@@ -65,7 +65,12 @@ function parseOrderNumber(raw: string): string {
   return trimmed.replace(/^#/, '');
 }
 
-export function Expedice() {
+interface ExpediceProps {
+  externalScan?: string | null;
+  onExternalScanHandled?: () => void;
+}
+
+export function Expedice({ externalScan, onExternalScanHandled }: ExpediceProps) {
   const [input, setInput] = useState('');
   const [processState, setProcessState] = useState<ProcessState>('idle');
   const [processStep, setProcessStep] = useState<ProcessStep>('order');
@@ -109,6 +114,13 @@ export function Expedice() {
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [focusInput]);
+
+  useEffect(() => {
+    if (externalScan && processState === 'idle') {
+      processOrder(externalScan);
+      onExternalScanHandled?.();
+    }
+  }, [externalScan]);
 
   async function processOrder(raw: string) {
     const orderName = parseOrderNumber(raw);
