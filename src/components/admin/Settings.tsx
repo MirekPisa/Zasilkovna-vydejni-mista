@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X, Printer, MapPin } from 'lucide-react';
+import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X, Printer, MapPin, Webhook } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -29,6 +29,8 @@ export function Settings() {
   const [shopifyToken, setShopifyToken] = useState('');
   const [shopifyShopDomain, setShopifyShopDomain] = useState('printybob.myshopify.com');
   const [overwriteShippingAddress, setOverwriteShippingAddress] = useState(true);
+  const [registeringWebhook, setRegisteringWebhook] = useState(false);
+  const [webhookStatus, setWebhookStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [labelFormat, setLabelFormat] = useState('A6 on A6');
   const [labelOffset, setLabelOffset] = useState(0);
   const [labelType, setLabelType] = useState<'pdf' | 'zpl'>('pdf');
@@ -133,6 +135,37 @@ export function Settings() {
   async function handleClearFolder() {
     await clearDirectoryHandle();
     setHotFolderHandle(null);
+  }
+
+  async function handleRegisterWebhook() {
+    setRegisteringWebhook(true);
+    setWebhookStatus(null);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const webhookUrl = `${supabaseUrl}/functions/v1/webhook-orders-create`;
+      const res = await fetch(
+        `${functionsUrl}/register-webhook`,
+        {
+          method: 'POST',
+          headers: functionsHeaders,
+          body: JSON.stringify({
+            shop_domain: shopifyShopDomain || DEMO_SHOP,
+            webhook_url: webhookUrl,
+          }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Nepodařilo se zaregistrovat webhook');
+      if (json.already_exists) {
+        setWebhookStatus({ ok: true, message: 'Webhook je již zaregistrován' });
+      } else {
+        setWebhookStatus({ ok: true, message: 'Webhook byl úspěšně zaregistrován' });
+      }
+    } catch (e) {
+      setWebhookStatus({ ok: false, message: e instanceof Error ? e.message : 'Chyba při registraci webhookU' });
+    } finally {
+      setRegisteringWebhook(false);
+    }
   }
 
   return (
@@ -306,11 +339,33 @@ export function Settings() {
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200">
-                <p className="text-xs text-blue-700 leading-relaxed">
-                  <strong>Nastavení webhookU v Shopify:</strong> Admin → Nastavení → Oznámení → Webhooky → Přidat webhook<br />
-                  Událost: <strong>Vytvoření objednávky</strong>, URL: <code className="bg-blue-100 px-1 rounded text-blue-800">/functions/v1/order-webhook</code>, Formát: JSON
-                </p>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleRegisterWebhook}
+                    disabled={registeringWebhook || loading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  >
+                    <Webhook className="w-4 h-4" />
+                    {registeringWebhook ? 'Registruji…' : 'Zaregistrovat webhook v Shopify'}
+                  </button>
+                </div>
+
+                {webhookStatus && (
+                  <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${webhookStatus.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                    {webhookStatus.ok ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                    {webhookStatus.message}
+                  </div>
+                )}
+
+                <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200">
+                  <p className="text-xs text-blue-700 leading-relaxed">
+                    Tlačítko výše automaticky zaregistruje webhook <strong>orders/create</strong> do vašeho Shopify eshopu.
+                    Objednávky se Zásilkovnou budou mít automaticky přepsanou dodací adresu na adresu výdejního místa.
+                    Nejprve uložte Shopify Admin API token a doménu eshopu.
+                  </p>
+                </div>
               </div>
             </>
           )}

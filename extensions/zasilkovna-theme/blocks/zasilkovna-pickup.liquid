@@ -149,6 +149,80 @@
     selectBtn.style.display = 'block';
     openWidget();
   });
+
+  function isZasilkovnaShipping() {
+    var shippingLabels = document.querySelectorAll('[data-shipping-method-label], .shipping-method__label, .shipping-method__title, input[name="checkout[shipping_rate][id]"]');
+    for (var i = 0; i < shippingLabels.length; i++) {
+      var el = shippingLabels[i];
+      var label = (el.getAttribute('data-shipping-method-label') || el.textContent || el.value || '').toLowerCase();
+      if (label.indexOf('zásilkovna') !== -1 || label.indexOf('zasilkovna') !== -1) {
+        var radio = el.closest && el.closest('.shipping-method');
+        if (radio) {
+          var input = radio.querySelector('input[type="radio"]');
+          if (input && input.checked) return true;
+        }
+        if (el.type === 'radio' && el.checked) return true;
+      }
+    }
+    var allRadios = document.querySelectorAll('input[type="radio"][name*="shipping"]');
+    for (var j = 0; j < allRadios.length; j++) {
+      if (!allRadios[j].checked) continue;
+      var parent = allRadios[j].closest && (allRadios[j].closest('.shipping-method') || allRadios[j].closest('[data-shipping-method]'));
+      if (!parent) continue;
+      var txt = parent.textContent.toLowerCase();
+      if (txt.indexOf('zásilkovna') !== -1 || txt.indexOf('zasilkovna') !== -1) return true;
+    }
+    return false;
+  }
+
+  function hasPickupPointSelected() {
+    return !!(pointIdInput.value && pointIdInput.value.trim() !== '');
+  }
+
+  function showValidationError() {
+    var existing = document.getElementById('zasilkovna-validation-error');
+    if (!existing) {
+      var msg = document.createElement('div');
+      msg.id = 'zasilkovna-validation-error';
+      msg.style.cssText = 'margin-top: 10px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; color: #dc2626; font-size: 14px; font-weight: 500;';
+      msg.textContent = 'Prosím vyberte výdejní místo Zásilkovny';
+      var block = document.getElementById('zasilkovna-pickup-block');
+      if (block) block.appendChild(msg);
+    }
+    var block = document.getElementById('zasilkovna-pickup-block');
+    if (block) block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function hideValidationError() {
+    var existing = document.getElementById('zasilkovna-validation-error');
+    if (existing) existing.remove();
+  }
+
+  function attachCheckoutValidation() {
+    var checkoutBtns = document.querySelectorAll(
+      '[name="checkout"], [data-checkout-btn], a[href*="/checkout"], button[data-action="checkout"], .cart__checkout-button, #checkout'
+    );
+    checkoutBtns.forEach(function(btn) {
+      if (btn._zasilkovnaValidated) return;
+      btn._zasilkovnaValidated = true;
+      btn.addEventListener('click', function(e) {
+        hideValidationError();
+        if (isZasilkovnaShipping() && !hasPickupPointSelected()) {
+          e.preventDefault();
+          e.stopPropagation();
+          showValidationError();
+          return false;
+        }
+      }, true);
+    });
+  }
+
+  attachCheckoutValidation();
+
+  var observer = new MutationObserver(function() {
+    attachCheckoutValidation();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 
