@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store } from 'lucide-react';
+import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { functionsUrl, functionsHeaders } from '../../lib/supabase';
+import { saveDirectoryHandle, loadDirectoryHandle, clearDirectoryHandle } from '../../lib/hotFolder';
 
 const DEMO_SHOP = 'demo-shop.myshopify.com';
 
@@ -20,9 +21,14 @@ export function Settings() {
   const [showKey, setShowKey] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [hotFolderHandle, setHotFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [hotFolderError, setHotFolderError] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
+    loadDirectoryHandle().then(handle => {
+      if (handle) setHotFolderHandle(handle);
+    }).catch(() => {});
   }, []);
 
   async function loadConfig() {
@@ -77,6 +83,25 @@ export function Settings() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSelectFolder() {
+    setHotFolderError(null);
+    try {
+      const handle = await (window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker?.();
+      if (!handle) throw new Error('Nepodporovaný prohlížeč');
+      await saveDirectoryHandle(handle);
+      setHotFolderHandle(handle);
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        setHotFolderError(e.message);
+      }
+    }
+  }
+
+  async function handleClearFolder() {
+    await clearDirectoryHandle();
+    setHotFolderHandle(null);
   }
 
   return (
@@ -238,6 +263,74 @@ export function Settings() {
           </span>
         )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-50">
+              <FolderOpen className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Hot Folder pro štítky</h2>
+              <p className="text-sm text-gray-500">Štítky se budou automaticky ukládat přímo do vybrané složky</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          {hotFolderError && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-700">{hotFolderError}</p>
+            </div>
+          )}
+
+          {hotFolderHandle ? (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+              <FolderCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-emerald-800 truncate">{hotFolderHandle.name}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">Štítky se ukládají do této složky automaticky</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearFolder}
+                className="flex-shrink-0 p-1.5 rounded-md text-emerald-600 hover:bg-emerald-100 transition-colors"
+                title="Odebrat složku"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-gray-50 border border-gray-200 border-dashed">
+              <FolderOpen className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-gray-500">Žádná složka není vybrána</p>
+                <p className="text-xs text-gray-400 mt-0.5">PDF štítky se budou stahovat klasicky do Stažené</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSelectFolder}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
+            >
+              <FolderOpen className="w-4 h-4 text-gray-500" />
+              {hotFolderHandle ? 'Změnit složku' : 'Vybrat složku'}
+            </button>
+            <p className="text-xs text-gray-400">
+              Vyžaduje Chrome / Edge — používá File System Access API
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200">
+            <p className="text-xs text-amber-700">
+              <strong>Poznámka:</strong> Po obnovení stránky je nutné složku vybrat znovu — prohlížeč z bezpečnostních důvodů neukládá trvalý přístup ke složkám.
+            </p>
+          </div>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader>

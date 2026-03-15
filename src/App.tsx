@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Settings2, Package, BookOpen, LayoutDashboard, MapPin, TrendingUp, ShoppingBag } from 'lucide-react';
+import { Settings2, Package, BookOpen, LayoutDashboard, MapPin, TrendingUp, ShoppingBag, Scan } from 'lucide-react';
 import { Settings } from './components/admin/Settings';
 import { OrdersList } from './components/admin/OrdersList';
 import { SetupGuide } from './components/admin/SetupGuide';
 import { WidgetPreview } from './components/admin/WidgetPreview';
+import { Expedice } from './components/admin/Expedice';
 
-type Tab = 'dashboard' | 'settings' | 'orders' | 'setup';
+type Tab = 'dashboard' | 'settings' | 'orders' | 'expedice' | 'setup';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Přehled', icon: LayoutDashboard },
   { id: 'settings', label: 'Nastavení', icon: Settings2 },
   { id: 'orders', label: 'Objednávky', icon: Package },
+  { id: 'expedice', label: 'Expedice', icon: Scan },
   { id: 'setup', label: 'Průvodce', icon: BookOpen },
 ];
 
@@ -146,6 +148,16 @@ export default function App() {
               <p className="text-sm text-gray-500 mt-0.5">Přehled objednávek s vybraným výdejním místem</p>
             </div>
             <OrdersList />
+          </div>
+        )}
+
+        {activeTab === 'expedice' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Expedice</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Automatické generování štítků pomocí čtečky čárových kódů</p>
+            </div>
+            <Expedice />
           </div>
         )}
 
