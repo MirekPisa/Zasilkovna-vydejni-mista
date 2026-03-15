@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X } from 'lucide-react';
+import { Key, Save, CheckCircle, Eye, EyeOff, AlertCircle, Store, FolderOpen, FolderCheck, X, Printer } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -8,12 +8,30 @@ import { saveDirectoryHandle, loadDirectoryHandle, clearDirectoryHandle } from '
 
 const DEMO_SHOP = 'demo-shop.myshopify.com';
 
+const LABEL_FORMATS = [
+  { value: 'A6 on A6', label: 'A6 on A6 — 105×148 mm, přímý tisk' },
+  { value: 'A7 on A7', label: 'A7 on A7 — 105×74 mm' },
+  { value: 'A6 on A4', label: 'A6 on A4 — 105×148 mm na A4' },
+  { value: 'A7 on A4', label: 'A7 on A4 — 105×74 mm na A4' },
+  { value: '105x35mm on A4', label: '105×35 mm on A4 — úzký štítek na A4' },
+  { value: 'A8 on A8', label: 'A8 on A8 — 50×74 mm' },
+];
+
+const ZPL_DPIS = [
+  { value: 203, label: '203 DPI' },
+  { value: 300, label: '300 DPI' },
+];
+
 export function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [apiPassword, setApiPassword] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [shopifyToken, setShopifyToken] = useState('');
   const [shopifyShopDomain, setShopifyShopDomain] = useState('printybob.myshopify.com');
+  const [labelFormat, setLabelFormat] = useState('A6 on A6');
+  const [labelOffset, setLabelOffset] = useState(0);
+  const [labelType, setLabelType] = useState<'pdf' | 'zpl'>('pdf');
+  const [zplDpi, setZplDpi] = useState(203);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -23,6 +41,8 @@ export function Settings() {
   const [showToken, setShowToken] = useState(false);
   const [hotFolderHandle, setHotFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [hotFolderError, setHotFolderError] = useState<string | null>(null);
+
+  const isA4Format = labelFormat.includes('on A4');
 
   useEffect(() => {
     loadConfig();
@@ -47,6 +67,10 @@ export function Settings() {
         setIsActive(json.data.is_active ?? true);
         setShopifyToken(json.data.shopify_access_token ?? '');
         setShopifyShopDomain(json.data.shopify_shop_domain || 'printybob.myshopify.com');
+        setLabelFormat(json.data.label_format ?? 'A6 on A6');
+        setLabelOffset(json.data.label_offset ?? 0);
+        setLabelType(json.data.label_type ?? 'pdf');
+        setZplDpi(json.data.zpl_dpi ?? 203);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Nepodařilo se načíst konfiguraci');
@@ -71,6 +95,10 @@ export function Settings() {
             is_active: isActive,
             shopify_access_token: shopifyToken,
             shopify_shop_domain: shopifyShopDomain,
+            label_format: labelFormat,
+            label_offset: labelOffset,
+            label_type: labelType,
+            zpl_dpi: zplDpi,
           }),
         }
       );
@@ -237,6 +265,108 @@ export function Settings() {
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100">
+              <Printer className="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Nastavení štítků</h2>
+              <p className="text-sm text-gray-500">Formát a typ štítků generovaných přes Packeta API</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardBody className="space-y-5">
+          {loading ? (
+            <div className="space-y-3">
+              <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+              <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Formát štítku
+                </label>
+                <select
+                  value={labelFormat}
+                  onChange={e => setLabelFormat(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#008060] focus:border-transparent transition-all"
+                >
+                  {LABEL_FORMATS.map(f => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {isA4Format && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Offset pozice <span className="text-gray-400 font-normal">(0–3)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={3}
+                    value={labelOffset}
+                    onChange={e => setLabelOffset(Math.min(3, Math.max(0, parseInt(e.target.value) || 0)))}
+                    className="w-32 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#008060] focus:border-transparent transition-all"
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">Počet prázdných pozic před prvním štítkem na stránce A4</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Typ štítku
+                </label>
+                <div className="flex gap-4">
+                  {(['pdf', 'zpl'] as const).map(type => (
+                    <label key={type} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="labelType"
+                        value={type}
+                        checked={labelType === type}
+                        onChange={() => setLabelType(type)}
+                        className="w-4 h-4 text-[#008060] border-gray-300 focus:ring-[#008060]"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">
+                          {type === 'pdf' ? 'PDF' : 'ZPL'}
+                        </span>
+                        <span className="text-xs text-gray-400 ml-1.5">
+                          {type === 'pdf' ? '(výchozí, všechny tiskárny)' : '(termotiskárny — Zebra apod.)'}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {labelType === 'zpl' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    ZPL DPI
+                  </label>
+                  <select
+                    value={zplDpi}
+                    onChange={e => setZplDpi(parseInt(e.target.value))}
+                    className="w-40 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#008060] focus:border-transparent transition-all"
+                  >
+                    {ZPL_DPIS.map(d => (
+                      <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1.5">Rozlišení termotiskárny — zkontrolujte v manuálu tiskárny</p>
+                </div>
+              )}
             </>
           )}
         </CardBody>

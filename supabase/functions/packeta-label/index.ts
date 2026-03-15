@@ -48,6 +48,10 @@ async function callPacketaApi(body: string): Promise<string> {
   return res.text();
 }
 
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -78,14 +82,14 @@ Deno.serve(async (req: Request) => {
 
     let { data: config } = await supabase
       .from("app_config")
-      .select("packeta_api_password")
+      .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi")
       .eq("shop_domain", shop_domain)
       .maybeSingle();
 
     if (!config) {
       const { data: fallback } = await supabase
         .from("app_config")
-        .select("packeta_api_password")
+        .select("packeta_api_password, label_format, label_offset, label_type, zpl_dpi")
         .limit(1)
         .maybeSingle();
       config = fallback;
@@ -99,6 +103,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const apiPassword = config.packeta_api_password;
+    const labelFormat: string = config.label_format ?? 'A6 on A6';
+    const labelOffset: number = config.label_offset ?? 0;
+    const labelType: string = config.label_type ?? 'pdf';
+    const zplDpi: number = config.zpl_dpi ?? 203;
 
     const nameParts = (customer_name ?? '').trim().split(/\s+/);
     const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0] || 'Zákazník';
@@ -141,28 +149,38 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const labelXml = `<?xml version="1.0" encoding="utf-8"?>
+    let labelXml: string;
+    if (labelType === 'zpl') {
+      labelXml = `<?xml version="1.0" encoding="utf-8"?>
+<packetLabelZpl>
+  <apiPassword>${apiPassword}</apiPassword>
+  <packetId>${barcode}</packetId>
+  <dpi>${zplDpi}</dpi>
+</packetLabelZpl>`;
+    } else {
+      labelXml = `<?xml version="1.0" encoding="utf-8"?>
 <packetLabelPdf>
   <apiPassword>${apiPassword}</apiPassword>
   <packetId>${barcode}</packetId>
-  <format>A7 on A4</format>
-  <offset>0</offset>
+  <format>${escapeXml(labelFormat)}</format>
+  <offset>${labelOffset}</offset>
 </packetLabelPdf>`;
+    }
 
     const labelResponse = await callPacketaApi(labelXml);
 
     const labelFault = checkXmlFault(labelResponse);
     if (labelFault) {
       return new Response(
-        JSON.stringify({ error: "LABEL_ERROR", message: `packetLabelPdf selhalo: ${labelFault}`, barcode }),
+        JSON.stringify({ error: "LABEL_ERROR", message: `packetLabel${labelType === 'zpl' ? 'Zpl' : 'Pdf'} selhalo: ${labelFault}`, barcode }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const pdfBase64 = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
-    if (!pdfBase64) {
+    const fileData = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
+    if (!fileData) {
       return new Response(
-        JSON.stringify({ error: "NO_PDF", message: "Packeta nevrátila PDF data.", barcode }),
+        JSON.stringify({ error: "NO_LABEL_DATA", message: "Packeta nevrátila data štítku.", barcode }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -175,7 +193,12 @@ Deno.serve(async (req: Request) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, barcode, pdf_base64: pdfBase64 }),
+      JSON.stringify({
+        success: true,
+        barcode,
+        pdf_base64: fileData,
+        label_type: labelType,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
@@ -185,7 +208,3 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
-
-function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-}

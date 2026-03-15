@@ -31,7 +31,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("app_config")
-        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, updated_at")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, updated_at")
         .eq("shop_domain", shopDomain)
         .maybeSingle();
 
@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: fallback, error: fallbackError } = await supabase
         .from("app_config")
-        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, updated_at")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, label_format, label_offset, label_type, zpl_dpi, updated_at")
         .limit(1)
         .maybeSingle();
 
@@ -78,12 +78,17 @@ Deno.serve(async (req: Request) => {
         .eq("shop_domain", shopDomain)
         .maybeSingle();
 
+      const { label_format, label_offset, label_type, zpl_dpi } = body;
       const payload: Record<string, unknown> = {};
       if (packeta_api_key !== undefined) payload.packeta_api_key = packeta_api_key;
       if (packeta_api_password !== undefined) payload.packeta_api_password = packeta_api_password;
       if (is_active !== undefined) payload.is_active = is_active;
       if (shopify_access_token !== undefined) payload.shopify_access_token = shopify_access_token;
       if (shopify_shop_domain !== undefined) payload.shopify_shop_domain = shopify_shop_domain;
+      if (label_format !== undefined) payload.label_format = label_format;
+      if (label_offset !== undefined) payload.label_offset = label_offset;
+      if (label_type !== undefined) payload.label_type = label_type;
+      if (zpl_dpi !== undefined) payload.zpl_dpi = zpl_dpi;
 
       let result;
       if (existing) {
