@@ -49,7 +49,13 @@ export async function savePdfToFolder(
   base64Data: string
 ): Promise<void> {
   const clean = base64Data.replace(/\s/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
-  const binary = atob(clean);
+  console.log('[savePdfToFolder] clean length:', clean.length, '| first 100:', clean.substring(0, 100));
+  let binary: string;
+  try {
+    binary = atob(clean);
+  } catch (e) {
+    throw new Error(`atob selhalo v savePdfToFolder: ${e} | délka: ${clean.length} | začátek: ${clean.substring(0, 40)}`);
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);

@@ -36,8 +36,24 @@ function cleanBase64(s: string): string {
 }
 
 function downloadPdf(base64: string, filename: string) {
+  const cleaned = cleanBase64(base64);
+  console.log('[downloadPdf] typeof base64:', typeof base64);
+  console.log('[downloadPdf] raw length:', base64.length, '| cleaned length:', cleaned.length);
+  console.log('[downloadPdf] first 100 chars (cleaned):', cleaned.substring(0, 100));
+  try {
+    atob(cleaned);
+    console.log('[downloadPdf] atob() OK');
+  } catch (e) {
+    console.error('[downloadPdf] atob() FAILED:', e, '| first invalid chars around pos:', (() => {
+      for (let i = 0; i < cleaned.length; i += 4) {
+        try { atob(cleaned.substring(i, i + 4)); } catch { return i; }
+      }
+      return 'unknown';
+    })());
+    throw new Error(`Neplatná base64 data štítku (délka: ${cleaned.length}, první znaky: ${cleaned.substring(0, 30)})`);
+  }
   const link = document.createElement('a');
-  link.href = `data:application/pdf;base64,${cleanBase64(base64)}`;
+  link.href = `data:application/pdf;base64,${cleaned}`;
   link.download = filename;
   link.click();
 }
@@ -144,7 +160,7 @@ export function Expedice() {
 
       setProcessStep('label');
 
-      const labelRes = await fetch(`${functionsUrl}/packeta-label`, {
+      const labelRes = await fetch(`${functionsUrl}/packeta-label?debug=1`, {
         method: 'POST',
         headers: functionsHeaders,
         body: JSON.stringify({
@@ -161,8 +177,21 @@ export function Expedice() {
 
       const labelJson = await labelRes.json();
 
+      console.log('[packeta-label] HTTP status:', labelRes.status);
+      console.log('[packeta-label] full response:', JSON.stringify(labelJson, null, 2));
+      if (labelJson.debug) {
+        console.log('[packeta-label] DEBUG LOG:');
+        (labelJson.debug as string[]).forEach((line: string) => console.log(' ', line));
+      }
+      if (labelJson.pdf_base64) {
+        console.log('[packeta-label] pdf_base64 typeof:', typeof labelJson.pdf_base64);
+        console.log('[packeta-label] pdf_base64 length:', labelJson.pdf_base64.length);
+        console.log('[packeta-label] pdf_base64 first 100:', String(labelJson.pdf_base64).substring(0, 100));
+      }
+
       if (!labelRes.ok || !labelJson.success) {
-        throw new Error(labelJson.message ?? labelJson.error ?? 'Generování štítku selhalo');
+        const debugInfo = labelJson.debug ? `\nDEBUG: ${(labelJson.debug as string[]).join(' | ')}` : '';
+        throw new Error((labelJson.message ?? labelJson.error ?? 'Generování štítku selhalo') + debugInfo);
       }
 
       const filename = `zasilkovna-${orderName}.pdf`;
