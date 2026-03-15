@@ -9,6 +9,7 @@ const DEMO_SHOP = 'demo-shop.myshopify.com';
 
 export function Settings() {
   const [apiKey, setApiKey] = useState('');
+  const [apiPassword, setApiPassword] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [shopifyToken, setShopifyToken] = useState('');
   const [shopifyShopDomain, setShopifyShopDomain] = useState('printybob.myshopify.com');
@@ -17,6 +18,7 @@ export function Settings() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export function Settings() {
       if (!res.ok) throw new Error(json.error ?? 'Nepodařilo se načíst konfiguraci');
       if (json.data) {
         setApiKey(json.data.packeta_api_key ?? '');
+        setApiPassword(json.data.packeta_api_password ?? '');
         setIsActive(json.data.is_active ?? true);
         setShopifyToken(json.data.shopify_access_token ?? '');
         setShopifyShopDomain(json.data.shopify_shop_domain || 'printybob.myshopify.com');
@@ -58,6 +61,7 @@ export function Settings() {
           headers: functionsHeaders,
           body: JSON.stringify({
             packeta_api_key: apiKey,
+            packeta_api_password: apiPassword,
             is_active: isActive,
             shopify_access_token: shopifyToken,
             shopify_shop_domain: shopifyShopDomain,
@@ -120,6 +124,25 @@ export function Settings() {
                   className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <div className="relative">
+                <Input
+                  label="API heslo Zásilkovny (pro štítky)"
+                  type={showPassword ? 'text' : 'password'}
+                  value={apiPassword}
+                  onChange={e => setApiPassword(e.target.value)}
+                  placeholder="Packeta REST API heslo"
+                  hint="Jiné než API klíč — najdete ho v Packeta klientské zóně → API → REST API heslo. Potřebné pro generování expedičních štítků."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
 

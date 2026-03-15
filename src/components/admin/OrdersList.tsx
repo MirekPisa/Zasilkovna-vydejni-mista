@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Package, MapPin, Mail, RefreshCw, Inbox, User, CreditCard, AlertCircle, Settings } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Package, MapPin, Mail, RefreshCw, Inbox, User, CreditCard, AlertCircle, Settings, Printer, CheckCircle, Tag } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -22,6 +22,12 @@ interface ShopifyOrder {
   packeta_point_name: string;
   packeta_point_address: string;
 }
+
+type LabelState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'done'; barcode: string }
+  | { status: 'error'; message: string };
 
 const FINANCIAL_STATUS_LABELS: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
   paid: { label: 'Zaplaceno', variant: 'success' },
@@ -48,11 +54,28 @@ function formatPrice(price: string, currency: string): string {
   return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency }).format(parseFloat(price));
 }
 
+function downloadPdf(base64: string, filename: string) {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function OrdersList() {
   const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; type?: string } | null>(null);
   const [totalFetched, setTotalFetched] = useState<number | null>(null);
+  const [labelStates, setLabelStates] = useState<Record<number, LabelState>>({});
 
   useEffect(() => {
     loadOrders();
@@ -77,6 +100,40 @@ export function OrdersList() {
       setError({ message: e instanceof Error ? e.message : 'Nepodařilo se načíst objednávky' });
     } finally {
       setLoading(false);
+    }
+  }
+
+  const setLabelState = useCallback((orderId: number, state: LabelState) => {
+    setLabelStates(prev => ({ ...prev, [orderId]: state }));
+  }, []);
+
+  async function handleCreateLabel(order: ShopifyOrder) {
+    setLabelState(order.id, { status: 'loading' });
+    try {
+      const res = await fetch(`${functionsUrl}/packeta-label`, {
+        method: 'POST',
+        headers: functionsHeaders,
+        body: JSON.stringify({
+          shop_domain: DEMO_SHOP,
+          order_id: String(order.id),
+          order_name: order.name,
+          customer_name: order.customer_name ?? '',
+          customer_email: order.customer_email ?? '',
+          packeta_point_id: order.packeta_point_id,
+          order_value: order.total_price,
+          currency: order.currency,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setLabelState(order.id, { status: 'error', message: json.message ?? json.error ?? 'Chyba při generování štítku' });
+        return;
+      }
+      setLabelState(order.id, { status: 'done', barcode: json.barcode });
+      const safeOrderName = order.name.replace(/[^a-zA-Z0-9-]/g, '');
+      downloadPdf(json.pdf_base64, `zasilkovna-${safeOrderName}.pdf`);
+    } catch (e) {
+      setLabelState(order.id, { status: 'error', message: e instanceof Error ? e.message : 'Chyba sítě' });
     }
   }
 
@@ -115,7 +172,7 @@ export function OrdersList() {
         <CardBody>
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+              <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
             ))}
           </div>
         </CardBody>
@@ -179,7 +236,10 @@ export function OrdersList() {
           {orders.map(order => {
             const fin = financialInfo(order.financial_status);
             const ful = fulfillmentInfo(order.fulfillment_status);
-            const hasPacketaData = order.packeta_point_id || order.packeta_point_name;
+            const hasPacketaData = !!(order.packeta_point_id || order.packeta_point_name);
+            const labelState = labelStates[order.id] ?? { status: 'idle' };
+            const canCreateLabel = hasPacketaData && order.packeta_point_id;
+
             return (
               <div key={order.id} className="px-6 py-4 hover:bg-gray-50/50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
@@ -192,6 +252,9 @@ export function OrdersList() {
                         <span className="font-semibold text-sm text-gray-900">{order.name}</span>
                         <Badge variant={fin.variant}>{fin.label}</Badge>
                         <Badge variant={ful.variant}>{ful.label}</Badge>
+                        {labelState.status === 'done' && (
+                          <Badge variant="success">Odesláno do Zásilkovny</Badge>
+                        )}
                       </div>
 
                       {order.shipping_title && (
@@ -218,6 +281,20 @@ export function OrdersList() {
                         </div>
                       )}
 
+                      {labelState.status === 'done' && (
+                        <div className="flex items-center gap-1.5 mb-1.5 text-xs text-emerald-700 font-medium">
+                          <Tag className="w-3.5 h-3.5" />
+                          Barcode: <span className="font-mono">{labelState.barcode}</span>
+                        </div>
+                      )}
+
+                      {labelState.status === 'error' && (
+                        <div className="flex items-start gap-1.5 mb-1.5 p-2 rounded-md bg-red-50 border border-red-100">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-700">{labelState.message}</p>
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-3 flex-wrap">
                         {order.customer_name && (
                           <span className="text-xs text-gray-500 flex items-center gap-1">
@@ -235,12 +312,38 @@ export function OrdersList() {
                     </div>
                   </div>
 
-                  <div className="flex-shrink-0 text-right space-y-1">
-                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-1 justify-end">
+                  <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-1">
                       <CreditCard className="w-3.5 h-3.5 text-gray-400" />
                       {formatPrice(order.total_price, order.currency)}
                     </p>
                     <p className="text-xs text-gray-400 whitespace-nowrap">{formatDate(order.created_at)}</p>
+
+                    {labelState.status === 'done' ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Štítek vytvořen
+                      </span>
+                    ) : (
+                      <div className="relative group">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canCreateLabel || labelState.status === 'loading'}
+                          loading={labelState.status === 'loading'}
+                          onClick={() => handleCreateLabel(order)}
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Vytvořit štítek
+                        </Button>
+                        {!canCreateLabel && (
+                          <div className="absolute bottom-full right-0 mb-1.5 w-44 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-normal text-center leading-snug z-10">
+                            Chybí výdejní místo — zákazník nevybral pobočku Zásilkovny
+                            <span className="absolute top-full right-3 border-4 border-transparent border-t-gray-900" />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

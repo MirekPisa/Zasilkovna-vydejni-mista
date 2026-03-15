@@ -31,7 +31,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("app_config")
-        .select("id, shop_domain, packeta_api_key, is_active, shopify_access_token, shopify_shop_domain, updated_at")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, updated_at")
         .eq("shop_domain", shopDomain)
         .maybeSingle();
 
@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === "POST") {
       const body = await req.json();
-      const { packeta_api_key, is_active, shopify_access_token, shopify_shop_domain } = body;
+      const { packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain } = body;
 
       const { data: existing } = await supabase
         .from("app_config")
@@ -60,6 +60,7 @@ Deno.serve(async (req: Request) => {
 
       const payload: Record<string, unknown> = {};
       if (packeta_api_key !== undefined) payload.packeta_api_key = packeta_api_key;
+      if (packeta_api_password !== undefined) payload.packeta_api_password = packeta_api_password;
       if (is_active !== undefined) payload.is_active = is_active;
       if (shopify_access_token !== undefined) payload.shopify_access_token = shopify_access_token;
       if (shopify_shop_domain !== undefined) payload.shopify_shop_domain = shopify_shop_domain;
