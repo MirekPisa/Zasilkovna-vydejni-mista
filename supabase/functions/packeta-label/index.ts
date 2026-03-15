@@ -65,6 +65,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const url = new URL(req.url);
+    const debugMode = url.searchParams.get('debug') === '1';
+    const debugLog: string[] = [];
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -167,24 +171,35 @@ Deno.serve(async (req: Request) => {
 </packetLabelPdf>`;
     }
 
+    if (debugMode) debugLog.push(`[labelXml] ${labelXml}`);
+
     const labelResponse = await callPacketaApi(labelXml);
+
+    if (debugMode) debugLog.push(`[labelResponse_raw200] ${labelResponse.substring(0, 200)}`);
 
     const labelFault = checkXmlFault(labelResponse);
     if (labelFault) {
       return new Response(
-        JSON.stringify({ error: "LABEL_ERROR", message: `packetLabel${labelType === 'zpl' ? 'Zpl' : 'Pdf'} selhalo: ${labelFault}`, barcode }),
+        JSON.stringify({ error: "LABEL_ERROR", message: `packetLabel${labelType === 'zpl' ? 'Zpl' : 'Pdf'} selhalo: ${labelFault}`, barcode, ...(debugMode ? { debug: debugLog } : {}) }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const rawFileData = parseXmlValue(labelResponse, 'result') || parseXmlValue(labelResponse, 'labelContents') || parseXmlValue(labelResponse, 'string');
+
+    if (debugMode) debugLog.push(`[rawFileData_first100] ${rawFileData.substring(0, 100)}`);
+    if (debugMode) debugLog.push(`[rawFileData_length] ${rawFileData.length}`);
+
     if (!rawFileData) {
       return new Response(
-        JSON.stringify({ error: "NO_LABEL_DATA", message: "Packeta nevrátila data štítku.", barcode, raw: labelResponse.substring(0, 500) }),
+        JSON.stringify({ error: "NO_LABEL_DATA", message: "Packeta nevrátila data štítku.", barcode, raw: labelResponse.substring(0, 500), ...(debugMode ? { debug: debugLog } : {}) }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     const fileData = rawFileData.replace(/\s/g, '');
+
+    if (debugMode) debugLog.push(`[fileData_first100] ${fileData.substring(0, 100)}`);
+    if (debugMode) debugLog.push(`[fileData_length] ${fileData.length}`);
 
     await supabase.from("packeta_labels").insert({
       shop_domain,
@@ -199,6 +214,7 @@ Deno.serve(async (req: Request) => {
         barcode,
         pdf_base64: fileData,
         label_type: labelType,
+        ...(debugMode ? { debug: debugLog } : {}),
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
