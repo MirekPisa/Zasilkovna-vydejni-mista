@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Scan, CheckCircle, XCircle, Clock, Package, Loader2, FolderOpen, AlertTriangle } from 'lucide-react';
+import { Scan, CheckCircle, XCircle, Clock, Package, Loader2, FolderOpen, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Card, CardHeader, CardBody } from '../ui/Card';
 import { functionsUrl, functionsHeaders } from '../../lib/supabase';
 import { loadDirectoryHandle, savePdfToFolder } from '../../lib/hotFolder';
@@ -11,13 +11,15 @@ interface ScanRecord {
   id: string;
   time: Date;
   orderName: string;
-  status: 'success' | 'error';
+  status: 'success' | 'warning' | 'error';
   barcode?: string;
+  trackingUrl?: string;
   message?: string;
+  fulfilled?: boolean;
 }
 
 type ProcessState = 'idle' | 'processing';
-type ProcessStep = 'order' | 'label';
+type ProcessStep = 'order' | 'label' | 'fulfill';
 
 interface ShopifyOrder {
   id: number;
@@ -34,6 +36,13 @@ function downloadPdf(base64: string, filename: string) {
   link.href = `data:application/pdf;base64,${base64}`;
   link.download = filename;
   link.click();
+}
+
+function parseOrderNumber(raw: string): string {
+  const trimmed = raw.trim();
+  const expMatch = trimmed.match(/^EXP#?(\d+)$/i);
+  if (expMatch) return expMatch[1];
+  return trimmed.replace(/^#/, '');
 }
 
 export function Expedice() {
@@ -82,7 +91,7 @@ export function Expedice() {
   }, [focusInput]);
 
   async function processOrder(raw: string) {
-    const orderName = raw.replace(/^#/, '').trim();
+    const orderName = parseOrderNumber(raw);
     if (!orderName) return;
 
     setInput('');
@@ -146,10 +155,10 @@ export function Expedice() {
         }),
       });
 
-      const json = await labelRes.json();
+      const labelJson = await labelRes.json();
 
-      if (!labelRes.ok || !json.success) {
-        throw new Error(json.message ?? json.error ?? 'Generování štítku selhalo');
+      if (!labelRes.ok || !labelJson.success) {
+        throw new Error(labelJson.message ?? labelJson.error ?? 'Generování štítku selhalo');
       }
 
       const filename = `zasilkovna-${orderName}.pdf`;
@@ -161,25 +170,60 @@ export function Expedice() {
             .then(fh => fh.createWritable())
             .then(w => w.close())
             .catch(() => {});
-          await savePdfToFolder(dirHandle, filename, json.pdf_base64);
+          await savePdfToFolder(dirHandle, filename, labelJson.pdf_base64);
           savedToFolder = true;
         } catch {
           setDirHandleLost(true);
-          downloadPdf(json.pdf_base64, filename);
+          downloadPdf(labelJson.pdf_base64, filename);
         }
       } else {
-        downloadPdf(json.pdf_base64, filename);
+        downloadPdf(labelJson.pdf_base64, filename);
+      }
+
+      setProcessStep('fulfill');
+
+      let fulfilled = false;
+      let trackingUrl: string | undefined;
+      let fulfillWarning: string | undefined;
+
+      try {
+        const fulfillRes = await fetch(`${functionsUrl}/fulfill-order`, {
+          method: 'POST',
+          headers: functionsHeaders,
+          body: JSON.stringify({
+            shop_domain: resolvedShopDomain,
+            order_id: String(order.id),
+            tracking_number: labelJson.barcode,
+          }),
+        });
+        const fulfillJson = await fulfillRes.json();
+
+        if (fulfillRes.ok && fulfillJson.success) {
+          fulfilled = true;
+          trackingUrl = fulfillJson.tracking_url;
+        } else {
+          fulfillWarning = fulfillJson.message ?? fulfillJson.error ?? 'Shopify fulfill selhal';
+        }
+      } catch {
+        fulfillWarning = 'Nepodařilo se označit objednávku jako odeslanou v Shopify';
       }
 
       playSuccess();
+
+      const pdfMsg = savedToFolder ? `Uloženo do složky jako ${filename}` : 'Staženo jako PDF';
+      const statusMsg = fulfilled
+        ? `${pdfMsg} · Expedováno + Označeno v Shopify`
+        : `${pdfMsg}${fulfillWarning ? ` · Varování: ${fulfillWarning}` : ''}`;
 
       setHistory(prev => [{
         id: crypto.randomUUID(),
         time: new Date(),
         orderName: `#${orderName}`,
-        status: 'success',
-        barcode: json.barcode,
-        message: savedToFolder ? `Uloženo do složky jako ${filename}` : 'Staženo jako PDF',
+        status: fulfilled ? 'success' : 'warning',
+        barcode: labelJson.barcode,
+        trackingUrl,
+        message: statusMsg,
+        fulfilled,
       }, ...prev].slice(0, 50));
     } catch (err) {
       playError();
@@ -203,9 +247,19 @@ export function Expedice() {
   }
 
   const todayCount = history.filter(r =>
-    r.status === 'success' &&
+    (r.status === 'success' || r.status === 'warning') &&
     r.time.toDateString() === new Date().toDateString()
   ).length;
+
+  function getStepLabel() {
+    switch (processStep) {
+      case 'order': return { main: `Načítám objednávku #${currentOrder}...`, sub: 'Ověřuji objednávku v Shopify...' };
+      case 'label': return { main: `Generuji štítek pro objednávku #${currentOrder}...`, sub: 'Komunikuji s Packeta API...' };
+      case 'fulfill': return { main: `Označuji objednávku #${currentOrder} jako odesláno...`, sub: 'Aktualizuji stav v Shopify...' };
+    }
+  }
+
+  const stepLabel = getStepLabel();
 
   return (
     <div className="space-y-6">
@@ -255,21 +309,29 @@ export function Expedice() {
                 </div>
               </div>
               <p className="text-xs text-gray-400 text-center">
-                Čtečka odešle číslo objednávky a stiskne Enter — nebo zadejte ručně a potvrďte Enter
+                Podporované formáty: <span className="font-mono">1039</span>, <span className="font-mono">#1039</span>, <span className="font-mono">EXP1039</span>, <span className="font-mono">EXP#1039</span>
               </p>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <Loader2 className="w-10 h-10 text-[#008060] animate-spin" />
               <div className="text-center">
-                <p className="text-base font-semibold text-gray-900">
-                  {processStep === 'order'
-                    ? `Načítám objednávku #${currentOrder}...`
-                    : `Generuji štítek pro objednávku #${currentOrder}...`}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {processStep === 'order' ? 'Ověřuji objednávku v Shopify...' : 'Komunikuji s Packeta API...'}
-                </p>
+                <p className="text-base font-semibold text-gray-900">{stepLabel.main}</p>
+                <p className="text-sm text-gray-500 mt-1">{stepLabel.sub}</p>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                {(['order', 'label', 'fulfill'] as ProcessStep[]).map((step, i) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full transition-colors ${
+                      processStep === step
+                        ? 'bg-[#008060] animate-pulse'
+                        : (['order', 'label', 'fulfill'] as ProcessStep[]).indexOf(processStep) > i
+                          ? 'bg-emerald-400'
+                          : 'bg-gray-200'
+                    }`} />
+                    {i < 2 && <div className="w-6 h-px bg-gray-200" />}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -287,25 +349,42 @@ export function Expedice() {
           <CardBody className="p-0">
             <div className="divide-y divide-gray-100">
               {history.map(record => (
-                <div key={record.id} className="flex items-center gap-4 px-5 py-3.5">
-                  <div className="flex-shrink-0">
+                <div key={record.id} className="flex items-start gap-4 px-5 py-3.5">
+                  <div className="flex-shrink-0 mt-0.5">
                     {record.status === 'success' ? (
                       <CheckCircle className="w-5 h-5 text-emerald-500" />
+                    ) : record.status === 'warning' ? (
+                      <AlertTriangle className="w-5 h-5 text-amber-500" />
                     ) : (
                       <XCircle className="w-5 h-5 text-red-500" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-gray-900">{record.orderName}</span>
                       {record.barcode && (
                         <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
                           {record.barcode}
                         </span>
                       )}
+                      {record.trackingUrl && (
+                        <a
+                          href={record.trackingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-[#008060] hover:underline"
+                        >
+                          Sledovat
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
                     </div>
                     {record.message && (
-                      <p className={`text-xs mt-0.5 ${record.status === 'error' ? 'text-red-600' : 'text-gray-500'}`}>
+                      <p className={`text-xs mt-0.5 ${
+                        record.status === 'error' ? 'text-red-600' :
+                        record.status === 'warning' ? 'text-amber-600' :
+                        'text-gray-500'
+                      }`}>
                         {record.message}
                       </p>
                     )}
@@ -314,9 +393,12 @@ export function Expedice() {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       record.status === 'success'
                         ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-red-50 text-red-700'
+                        : record.status === 'warning'
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
                     }`}>
-                      {record.status === 'success' ? 'Expedováno' : 'Chyba'}
+                      {record.status === 'success' ? 'Expedováno + Označeno' :
+                       record.status === 'warning' ? 'Štítek OK' : 'Chyba'}
                     </span>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {record.time.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
