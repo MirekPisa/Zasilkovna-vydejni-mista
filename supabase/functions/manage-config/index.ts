@@ -42,8 +42,28 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      if (data) {
+        return new Response(
+          JSON.stringify({ data }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("app_config")
+        .select("id, shop_domain, packeta_api_key, packeta_api_password, is_active, shopify_access_token, shopify_shop_domain, updated_at")
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackError) {
+        return new Response(
+          JSON.stringify({ error: fallbackError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ data }),
+        JSON.stringify({ data: fallback }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
